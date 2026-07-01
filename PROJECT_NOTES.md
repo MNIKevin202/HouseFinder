@@ -69,7 +69,11 @@ Settings includes an API Providers section. Current providers:
 - Realty Mole: stub/TODO, disabled by default.
 - Manual Mode / No API: always available.
 
-Each provider has its own enabled toggle, masked API key field, monthly usage limit, usage counter, priority number, test button, reset counter button, and clear key button. API keys are masked by default and can be revealed per provider.
+Each provider has its own enabled toggle, masked API key field, monthly usage limit, usage counter, priority number, usage dashboard link, test button, reset counter button, and clear key button. API keys are masked by default and can be revealed per provider.
+
+The Usage Page button opens the provider's saved usage dashboard link in the system browser.
+
+Custom providers can be added from Settings. They are saved locally as disabled stubs until a matching API client is implemented in code.
 
 ## How Provider Priority And Fallback Work
 
@@ -132,6 +136,8 @@ The reusable API layer lives in:
 
 Future providers can be added by implementing another provider class in `apiService.js`, declaring capabilities in `settingsStore.js`, registering it in `ApiProviderManager`, and mapping its response fields into HouseFinder's saved-home shape.
 
+Custom providers created in the UI are useful for tracking API keys, usage links, monthly limits, and priority placeholders before implementation. They do not send requests until a developer adds a real provider implementation.
+
 ## Apillow Integration Limitations
 
 - HouseFinder does not hardcode or ship any Apillow API key.
@@ -142,6 +148,7 @@ Future providers can be added by implementing another provider class in `apiServ
 - Enrichment by URL falls back to the manual save form whenever all providers are disabled, missing keys, capped by monthly limits, unsupported, unavailable, or return no details.
 - Test Connection consumes real provider request usage for implemented providers because it verifies the key with a real API request.
 - RentCast and Realty Mole are present as disabled-by-default stubs. Their API request/response mapping still needs implementation.
+- User-added custom providers are also stubs/TODOs until implemented.
 
 ## How To Package For macOS And Windows
 
@@ -213,6 +220,8 @@ It compares the latest release tag, such as `v0.1.1`, with the installed app ver
 - macOS Intel: `x64.dmg` or `x86_64.dmg`.
 
 When the user chooses to download an update, HouseFinder downloads the installer to a temporary folder and asks the operating system to open it. If opening fails, it reveals the downloaded installer in Finder or Explorer.
+
+After the installer opens successfully, HouseFinder quits so the installer can continue without the running app blocking file replacement.
 
 GitHub Actions artifacts are not used as the update feed. The update feed is GitHub Releases.
 

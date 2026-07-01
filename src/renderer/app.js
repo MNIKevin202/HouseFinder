@@ -569,6 +569,18 @@ function settingsPage() {
             <option value="manual" ${settings.apiProvider === "manual" ? "selected" : ""}>Manual Mode / No API</option>
           </select></label>
           ${providers.map(providerSettingsCard).join("")}
+          <section class="providerCard">
+            <div class="providerHeader">
+              <div>
+                <h3>Add custom provider</h3>
+                <p>Custom providers are saved as disabled stubs until their API client is implemented.</p>
+              </div>
+            </div>
+            <div class="providerGrid customProviderGrid">
+              <label class="field"><span>Provider name</span><input name="newProviderName" placeholder="Example API" /></label>
+              <label class="field wide"><span>Usage link</span><input name="newProviderUsageUrl" placeholder="https://provider.example.com/usage" /></label>
+            </div>
+          </section>
           <p class="settingsHint">API keys are stored only on this computer. Secure storage: ${settings.secureStorage ? "available" : "not available, using local settings fallback"}.</p>
           <div class="buttonRow">
             <button class="primary" type="submit">Save API Settings</button>
@@ -651,6 +663,7 @@ function providerSettingsCard(provider) {
         <label class="field"><span>Priority</span><input name="${provider.id}:priority" type="number" min="1" value="${escapeHtml(provider.priority)}" /></label>
         <label class="field"><span>Monthly limit</span><input name="${provider.id}:monthlyUsageLimit" type="number" min="0" value="${escapeHtml(provider.monthlyUsageLimit)}" /></label>
         <label class="field wide"><span>API key</span><input name="${provider.id}:apiKey" id="${provider.id}ApiKey" type="${state.showApiKey[provider.id] ? "text" : "password"}" placeholder="${provider.hasApiKey ? "Saved API key" : "Paste API key"}" /></label>
+        <label class="field wide"><span>Usage link</span><input name="${provider.id}:usageUrl" type="url" value="${escapeHtml(provider.usageUrl || "")}" placeholder="https://provider.example.com/usage" /></label>
       </div>
       <div class="capabilityList">${Object.entries(provider.capabilities || {}).map(([key, enabled]) => `<span class="${enabled ? "capOn" : "capOff"}">${escapeHtml(capabilityLabel(key))}</span>`).join("")}</div>
       <div class="providerMeta">
@@ -662,6 +675,7 @@ function providerSettingsCard(provider) {
         <button type="button" data-toggle-provider-key="${provider.id}">${state.showApiKey[provider.id] ? "Hide API Key" : "Show API Key"}</button>
         <button type="button" data-clear-provider-key="${provider.id}">Clear API Key</button>
         <button type="button" data-reset-provider-usage="${provider.id}">Reset Usage Counter</button>
+        <button type="button" data-open-provider-usage="${provider.id}" ${provider.usageUrl ? "" : "disabled"}>Usage Page</button>
         <button type="button" data-test-provider="${provider.id}">Test Connection</button>
       </div>
     </section>
@@ -972,11 +986,14 @@ function bindApiSettings() {
       enabled: form.elements[`${provider.id}:enabled`]?.checked || false,
       priority: form.elements[`${provider.id}:priority`]?.value || provider.priority,
       monthlyUsageLimit: form.elements[`${provider.id}:monthlyUsageLimit`]?.value || provider.monthlyUsageLimit,
+      usageUrl: form.elements[`${provider.id}:usageUrl`]?.value || "",
       apiKey: form.elements[`${provider.id}:apiKey`]?.value?.trim() || ""
     }));
     const settings = {
       apiProvider: form.elements.apiProvider.value,
-      providers: providerInputs
+      providers: providerInputs,
+      newProviderName: form.elements.newProviderName?.value?.trim() || "",
+      newProviderUsageUrl: form.elements.newProviderUsageUrl?.value?.trim() || ""
     };
     state.apiSettings = await api.settings.saveApi(settings);
     state.settingsMessage = "API settings saved locally.";
@@ -1008,6 +1025,12 @@ function bindApiSettings() {
       state.apiSettings = await api.settings.resetApiUsage(providerId);
       state.settingsMessage = `${providerName(providerId)} usage counter reset for the current month.`;
       render();
+    });
+  });
+  document.querySelectorAll("[data-open-provider-usage]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const provider = state.apiSettings.providers.find((item) => item.id === button.dataset.openProviderUsage);
+      if (provider?.usageUrl) api.shell.openExternal(provider.usageUrl);
     });
   });
   document.querySelectorAll("[data-test-provider]").forEach((button) => {

@@ -55,6 +55,7 @@ const PROVIDER_DEFINITIONS = [
 
 const DEFAULT_SETTINGS = {
   apiProvider: "auto",
+  customProviders: [],
   providers: Object.fromEntries(PROVIDER_DEFINITIONS.map((definition, index) => [
     definition.id,
     defaultProviderSettings(definition, index)
@@ -85,13 +86,14 @@ class SettingsStore {
   normalizeSettings(input = {}) {
     const migrated = {
       apiProvider: input.apiProvider === "manual" ? "manual" : "auto",
+      customProviders: normalizeCustomProviders(input.customProviders || []),
       providers: clone(DEFAULT_SETTINGS.providers)
     };
 
-    for (const definition of PROVIDER_DEFINITIONS) {
+    for (const definition of [...PROVIDER_DEFINITIONS, ...migrated.customProviders]) {
       const existing = input.providers?.[definition.id] || {};
       migrated.providers[definition.id] = {
-        ...migrated.providers[definition.id],
+        ...(migrated.providers[definition.id] || defaultProviderSettings(definition, providerIndex(definition.id, migrated.customProviders))),
         ...existing,
         id: definition.id
       };
@@ -113,6 +115,7 @@ class SettingsStore {
   getPublicSettings() {
     this.resetUsageIfNeeded();
     const providers = PROVIDER_DEFINITIONS
+      .concat(this.settings.customProviders || [])
       .map((definition) => this.publicProvider(definition))
       .sort((a, b) => a.priority - b.priority);
     const apillow = providers.find((provider) => provider.id === "apillow");
@@ -140,6 +143,7 @@ class SettingsStore {
       id: definition.id,
       name: definition.name,
       implemented: definition.implemented,
+      custom: Boolean(definition.custom),
       enabled: Boolean(provider.enabled),
       hasApiKey: Boolean(this.getProviderApiKey(definition.id)),
       monthlyUsageLimit: limit,
@@ -149,6 +153,7 @@ class SettingsStore {
       usageLabel: `${count} / ${limit || "unlimited"} used`,
       usageWarning: warning,
       priority: Number(provider.priority) || 99,
+      usageUrl: provider.usageUrl || "",
       lastTestStatus: provider.lastTestStatus || "",
       lastSuccessfulRequestDate: provider.lastSuccessfulRequestDate || "",
       lastErrorMessage: provider.lastErrorMessage || "",
@@ -188,6 +193,7 @@ class SettingsStore {
       provider.enabled = Boolean(providerInput.enabled);
       provider.monthlyUsageLimit = Math.max(0, Number(providerInput.monthlyUsageLimit) || 0);
       provider.priority = Math.max(1, Number(providerInput.priority) || provider.priority || 99);
+      provider.usageUrl = normalizeUrl(providerInput.usageUrl || "");
       if (Object.prototype.hasOwnProperty.call(providerInput, "apiKey")) {
         const key = String(providerInput.apiKey || "").trim();
         if (key) {
@@ -195,6 +201,9 @@ class SettingsStore {
           provider.apiKeyEncrypted = encryptionAvailable();
         }
       }
+    }
+    if (input.newProviderName) {
+      this.addCustomProvider(input.newProviderName, input.newProviderUsageUrl);
     }
     this.resetUsageIfNeeded();
     this.persist();
@@ -285,9 +294,30 @@ class SettingsStore {
   }
 
   getProvidersByPriority() {
-    return PROVIDER_DEFINITIONS
+    return PROVIDER_DEFINITIONS.concat(this.settings.customProviders || [])
       .map((definition) => this.publicProvider(definition))
       .sort((a, b) => a.priority - b.priority);
+  }
+
+  addCustomProvider(name, usageUrl = "") {
+    const cleanName = String(name || "").trim();
+    if (!cleanName) return null;
+    const id = uniqueProviderId(slugify(cleanName), this.settings);
+    const definition = {
+      id,
+      name: cleanName,
+      implemented: false,
+      custom: true,
+      defaultEnabled: false,
+      defaultLimit: 50,
+      capabilities: emptyCapabilities()
+    };
+    this.settings.customProviders.push(definition);
+    this.settings.providers[id] = {
+      ...defaultProviderSettings(definition, providerIndex(id, this.settings.customProviders)),
+      usageUrl: normalizeUrl(usageUrl)
+    };
+    return id;
   }
 
   encodeSecret(secret) {
@@ -316,10 +346,69 @@ function defaultProviderSettings(definition, index) {
     usageMonth: currentMonth(),
     usageCount: 0,
     priority: index + 1,
+    usageUrl: "",
     lastTestStatus: "",
     lastSuccessfulRequestDate: "",
     lastErrorMessage: ""
   };
+}
+
+function normalizeCustomProviders(customProviders) {
+  return customProviders
+    .filter((provider) => provider && provider.id && provider.name)
+    .map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      implemented: false,
+      custom: true,
+      defaultEnabled: false,
+      defaultLimit: Number(provider.defaultLimit) || 50,
+      capabilities: { ...emptyCapabilities(), ...(provider.capabilities || {}) }
+    }));
+}
+
+function emptyCapabilities() {
+  return {
+    propertySearch: false,
+    listingDetails: false,
+    addressLookup: false,
+    homeValueEstimate: false,
+    rentEstimate: false,
+    comparableProperties: false,
+    photos: false
+  };
+}
+
+function slugify(value) {
+  return String(value || "custom")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "custom";
+}
+
+function uniqueProviderId(base, settings) {
+  let candidate = `custom-${base}`;
+  let index = 2;
+  while (settings.providers[candidate] || PROVIDER_DEFINITIONS.some((provider) => provider.id === candidate)) {
+    candidate = `custom-${base}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function providerIndex(id, customProviders = []) {
+  const builtInIndex = PROVIDER_DEFINITIONS.findIndex((provider) => provider.id === id);
+  if (builtInIndex >= 0) return builtInIndex;
+  const customIndex = customProviders.findIndex((provider) => provider.id === id);
+  return PROVIDER_DEFINITIONS.length + Math.max(customIndex, 0);
+}
+
+function normalizeUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url}`;
 }
 
 function usageWarning(count, limit) {

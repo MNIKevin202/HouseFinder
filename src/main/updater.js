@@ -99,6 +99,7 @@ async function downloadAndOpenUpdate(assetUrl, assetName) {
     shell.showItemInFolder(targetPath);
     throw new Error(openResult);
   }
+  setTimeout(() => app.quit(), 500);
   return targetPath;
 }
 

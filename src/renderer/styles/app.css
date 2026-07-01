@@ -687,7 +687,11 @@ legend {
 }
 
 .providerGrid .wide {
-  grid-column: auto;
+  grid-column: span 2;
+}
+
+.customProviderGrid {
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr);
 }
 
 .providerMeta {

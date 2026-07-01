@@ -29,7 +29,11 @@ class ApiProviderManager {
   }
 
   getProvider(id) {
-    return this.providers[id] || null;
+    return this.providers[id] || new StubProvider({
+      id,
+      name: id,
+      message: "This custom provider is saved in Settings but needs a code implementation before it can send API requests."
+    });
   }
 
   async testConnection(providerId = "apillow") {
