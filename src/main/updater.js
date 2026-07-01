@@ -5,6 +5,7 @@ const path = require("path");
 
 const REPO = "MNIKevin202/HouseFinder";
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
+const RELEASES_PAGE_URL = `https://github.com/${REPO}/releases`;
 
 function parseVersion(version) {
   return String(version || "0.0.0")
@@ -43,6 +44,19 @@ async function checkForUpdates({ silent = false } = {}) {
       Accept: "application/vnd.github+json"
     }
   });
+  if (response.status === 404) {
+    return {
+      repo: REPO,
+      currentVersion,
+      latestVersion: "",
+      releaseUrl: RELEASES_PAGE_URL,
+      hasUpdate: false,
+      assetName: "",
+      assetUrl: "",
+      setupRequired: true,
+      message: "No published GitHub Release was found yet. Publish a version tag such as v0.1.0, then attach the installer assets to that release."
+    };
+  }
   if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
   const release = await response.json();
   const latestVersion = release.tag_name || release.name;
@@ -91,6 +105,7 @@ async function downloadAndOpenUpdate(assetUrl, assetName) {
 module.exports = {
   REPO,
   RELEASES_URL,
+  RELEASES_PAGE_URL,
   checkForUpdates,
   downloadAndOpenUpdate,
   isNewerVersion,

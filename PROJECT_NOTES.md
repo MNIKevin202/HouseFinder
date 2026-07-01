@@ -183,6 +183,8 @@ When the user chooses to download an update, HouseFinder downloads the installer
 
 GitHub Actions artifacts are not used as the update feed. The update feed is GitHub Releases.
 
+If the repository has no published GitHub Release yet, GitHub returns 404 for `/releases/latest`. HouseFinder now treats that as a setup state instead of a broken network error and shows a message that the first version tag/release still needs to be published.
+
 ## Remaining TODOs
 
 - Add polished app icons for macOS and Windows.

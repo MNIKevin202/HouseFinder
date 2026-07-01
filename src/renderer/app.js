@@ -870,7 +870,10 @@ function bindSettings() {
     resultBox.textContent = "Checking GitHub Releases...";
     try {
       const result = await api.updates.check({ silent: true });
-      if (!result.hasUpdate) {
+      if (result.setupRequired) {
+        resultBox.innerHTML = `${escapeHtml(result.message)} <button id="openReleasesPage">Open GitHub Releases</button>`;
+        document.querySelector("#openReleasesPage").addEventListener("click", () => api.shell.openExternal(result.releaseUrl));
+      } else if (!result.hasUpdate) {
         resultBox.textContent = `No update found. Installed: ${result.currentVersion}. Latest: ${result.latestVersion || "none"}.`;
       } else if (result.assetUrl) {
         resultBox.innerHTML = `Update ${escapeHtml(result.latestVersion)} is available. <button id="downloadUpdate">Download and open installer</button>`;

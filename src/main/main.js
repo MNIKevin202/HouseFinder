@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { HouseFinderDatabase } = require("./database");
-const { checkForUpdates, downloadAndOpenUpdate, REPO, RELEASES_URL } = require("./updater");
+const { checkForUpdates, downloadAndOpenUpdate, REPO, RELEASES_URL, RELEASES_PAGE_URL } = require("./updater");
 const { SettingsStore } = require("./settingsStore");
 const { ApiProviderRegistry } = require("./apiService");
 
@@ -68,6 +68,7 @@ function registerIpc() {
     settingsPath: settingsStore.settingsPath,
     repo: REPO,
     releasesUrl: RELEASES_URL,
+    releasesPageUrl: RELEASES_PAGE_URL,
     releaseNotesSummary
   }));
   ipcMain.handle("settings:get-api", () => settingsStore.getPublicSettings());
@@ -89,6 +90,7 @@ function registerIpc() {
   ipcMain.handle("updates:download-open", (_event, assetUrl, assetName) => downloadAndOpenUpdate(assetUrl, assetName));
   ipcMain.handle("shell:open-path", (_event, targetPath) => shell.openPath(targetPath));
   ipcMain.handle("shell:show-item", (_event, targetPath) => shell.showItemInFolder(targetPath));
+  ipcMain.handle("shell:open-external", (_event, url) => shell.openExternal(url));
 }
 
 function saveScreenshot(dataUrl) {

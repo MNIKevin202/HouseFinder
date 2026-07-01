@@ -38,7 +38,8 @@ contextBridge.exposeInMainWorld("housefinder", {
   },
   shell: {
     openPath: (targetPath) => ipcRenderer.invoke("shell:open-path", targetPath),
-    showItem: (targetPath) => ipcRenderer.invoke("shell:show-item", targetPath)
+    showItem: (targetPath) => ipcRenderer.invoke("shell:show-item", targetPath),
+    openExternal: (url) => ipcRenderer.invoke("shell:open-external", url)
   },
   app: {
     metadata: () => ipcRenderer.invoke("app:metadata")
