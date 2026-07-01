@@ -105,6 +105,7 @@ Usage is tracked separately per provider during the current calendar month.
 
 - Each provider counter resets automatically when a new month begins.
 - Cached search/enrichment results are reused during the same calendar month and do not increment usage.
+- Settings and API Search show an aggregate dashboard for enabled providers: total allowed, total used, total left, and enabled provider count.
 - Missing API key checks, disabled provider checks, unsupported operation checks, and locally blocked monthly-limit checks are not counted.
 - Requests actually sent to a provider are counted, including requests that return no results, API errors, or network failures.
 - Settings displays usage like `Apillow: 23 / 100 used`.

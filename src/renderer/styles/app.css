@@ -510,7 +510,8 @@ legend {
 
 .apiNotice,
 .apiMessage,
-.usageBox {
+.usageBox,
+.apiUsageDashboard {
   margin-bottom: 14px;
 }
 
@@ -598,6 +599,43 @@ legend {
 .usageBox {
   display: grid;
   gap: 4px;
+}
+
+.apiUsageDashboard {
+  border: 1px solid var(--line);
+  background: #11141a;
+  border-radius: var(--radius);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.apiUsageDashboard.warning {
+  border-color: #f2c94c;
+}
+
+.apiUsageDashboard.critical {
+  border-color: var(--danger);
+}
+
+.apiUsageDashboard div {
+  display: grid;
+  gap: 4px;
+}
+
+.apiUsageDashboard span,
+.apiUsageDashboard p {
+  color: var(--muted);
+}
+
+.apiUsageDashboard strong {
+  font-size: 22px;
+}
+
+.apiUsageDashboard p {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .providerCard {
@@ -700,6 +738,7 @@ legend {
   .apiResult,
   .filters,
   .providerGrid,
+  .apiUsageDashboard,
   fieldset,
   .calcInputs {
     grid-template-columns: 1fr;

@@ -119,6 +119,7 @@ class SettingsStore {
     return {
       apiProvider: this.settings.apiProvider,
       providers,
+      aggregateUsage: aggregateProviderUsage(providers),
       activeProviderStatus: this.getActiveProviderStatus(),
       hasApillowApiKey: Boolean(this.getProviderApiKey("apillow")),
       monthlyUsageLimit: apillow?.monthlyUsageLimit || 0,
@@ -334,6 +335,27 @@ function providerExhausted(provider) {
   return provider.monthlyUsageLimit > 0 && provider.usageCount >= provider.monthlyUsageLimit;
 }
 
+function aggregateProviderUsage(providers = []) {
+  const enabled = providers.filter((provider) => provider.enabled);
+  const limited = enabled.filter((provider) => provider.monthlyUsageLimit > 0);
+  const unlimited = enabled.filter((provider) => provider.monthlyUsageLimit === 0);
+  const totalLimit = limited.reduce((sum, provider) => sum + provider.monthlyUsageLimit, 0);
+  const totalUsed = enabled.reduce((sum, provider) => sum + provider.usageCount, 0);
+  const totalRemaining = limited.reduce((sum, provider) => sum + Math.max(provider.monthlyUsageLimit - provider.usageCount, 0), 0);
+  const warning = totalLimit > 0 ? usageWarning(totalUsed, totalLimit) : "";
+  return {
+    enabledProviders: enabled.length,
+    totalLimit,
+    totalUsed,
+    totalRemaining,
+    hasUnlimited: unlimited.length > 0,
+    usageWarning: warning,
+    usageLabel: unlimited.length
+      ? `${totalUsed} used • ${totalRemaining} limited requests left • ${unlimited.length} unlimited provider${unlimited.length === 1 ? "" : "s"}`
+      : `${totalUsed} / ${totalLimit} used • ${totalRemaining} left`
+  };
+}
+
 function encryptionAvailable() {
   return Boolean(safeStorage?.isEncryptionAvailable?.());
 }
@@ -342,4 +364,4 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-module.exports = { SettingsStore, currentMonth, usageWarning, PROVIDER_DEFINITIONS };
+module.exports = { SettingsStore, currentMonth, usageWarning, PROVIDER_DEFINITIONS, aggregateProviderUsage };

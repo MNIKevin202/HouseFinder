@@ -271,6 +271,7 @@ function apiSearchPage() {
     ${pageHeader("API Search", "Search Apillow without scraping listing sites, then save anything useful locally.", `
       <button data-route="settings">API Settings</button>
     `)}
+    ${apiUsageDashboard(settings)}
     <section class="panel apiNotice ${settings.usageWarning || ""}">
       <div>
         <strong>${escapeHtml(settings.activeProviderStatus?.label || "API provider status unavailable")}</strong>
@@ -561,6 +562,7 @@ function settingsPage() {
       </div>
       <div class="panel">
         <div class="panelTitle">API Providers</div>
+        ${apiUsageDashboard(settings)}
         <form id="apiSettingsForm" class="settingsForm">
           <label class="field"><span>API Mode</span><select name="apiProvider">
             <option value="auto" ${settings.apiProvider !== "manual" ? "selected" : ""}>Automatic provider fallback</option>
@@ -595,6 +597,32 @@ function settingsPage() {
 function apiUsageCopy(settings = {}) {
   if (settings.apiProvider === "manual") return "Manual Mode is active. Saved homes and manual entry continue to work normally.";
   return "HouseFinder starts with the highest-priority enabled provider, then falls back when a provider is missing a key, out of usage, unsupported, or fails.";
+}
+
+function apiUsageDashboard(settings = {}) {
+  const usage = settings.aggregateUsage || {};
+  const warning = usage.usageWarning || "";
+  return `
+    <section class="apiUsageDashboard ${warning}">
+      <div>
+        <span>Total allowed</span>
+        <strong>${usage.hasUnlimited ? "Unlimited+" : numberText(usage.totalLimit)}</strong>
+      </div>
+      <div>
+        <span>Total used</span>
+        <strong>${numberText(usage.totalUsed)}</strong>
+      </div>
+      <div>
+        <span>Total left</span>
+        <strong>${usage.hasUnlimited ? `${numberText(usage.totalRemaining)}+` : numberText(usage.totalRemaining)}</strong>
+      </div>
+      <div>
+        <span>Enabled providers</span>
+        <strong>${numberText(usage.enabledProviders)}</strong>
+      </div>
+      <p>${escapeHtml(usage.usageLabel || "No enabled API providers yet.")}</p>
+    </section>
+  `;
 }
 
 function providerStatusPill() {
