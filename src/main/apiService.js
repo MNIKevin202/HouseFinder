@@ -9,10 +9,11 @@ class ApiError extends Error {
 }
 
 class ApiProviderRegistry {
-  constructor({ settingsStore }) {
+  constructor({ settingsStore, apiCache }) {
     this.settingsStore = settingsStore;
+    this.apiCache = apiCache;
     this.providers = {
-      apillow: new ApillowProvider({ settingsStore })
+      apillow: new ApillowProvider({ settingsStore, apiCache })
     };
   }
 
@@ -40,8 +41,9 @@ class ApiProviderRegistry {
 }
 
 class ApillowProvider {
-  constructor({ settingsStore }) {
+  constructor({ settingsStore, apiCache }) {
     this.settingsStore = settingsStore;
+    this.apiCache = apiCache;
   }
 
   async testConnection() {
@@ -60,18 +62,21 @@ class ApillowProvider {
 
   async search(criteria = {}) {
     const payload = buildSearchPayload(criteria);
-    const results = await this.runPropertyJob(payload);
+    const { results, fromCache } = await this.runCachedPropertyJob("search", payload);
     return {
       ok: true,
       results: results.map(normalizeApillowResult),
       settings: this.settingsStore.getPublicSettings(),
-      message: results.length ? "" : "Apillow returned no results for this search."
+      fromCache,
+      message: results.length
+        ? fromCache ? "Loaded from this month's saved API data. No Apillow request was used." : ""
+        : "Apillow returned no results for this search."
     };
   }
 
   async enrichByUrl(url) {
     if (!url) throw new ApiError("No listing URL was provided.", "missing_url");
-    const results = await this.runPropertyJob({
+    const { results, fromCache } = await this.runCachedPropertyJob("enrich", {
       urls: [url],
       type: "sale",
       max_items: 1
@@ -80,8 +85,19 @@ class ApillowProvider {
     return {
       ok: true,
       home: normalizeApillowResult(results[0]),
+      fromCache,
       settings: this.settingsStore.getPublicSettings()
     };
+  }
+
+  async runCachedPropertyJob(scope, payload) {
+    const cached = this.apiCache?.get("apillow", scope, payload);
+    if (cached) {
+      return { results: cached.results || [], fromCache: true };
+    }
+    const results = await this.runPropertyJob(payload);
+    this.apiCache?.set("apillow", scope, payload, { results });
+    return { results, fromCache: false };
   }
 
   async runPropertyJob(payload) {

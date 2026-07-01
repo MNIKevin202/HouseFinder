@@ -11,7 +11,7 @@
     "dist:mac": "electron-builder --mac dmg zip --publish never",
     "dist:win": "electron-builder --win nsis --publish never",
     "pack": "electron-builder --dir --publish never",
-    "lint": "node --check src/main/main.js && node --check src/main/database.js && node --check src/main/updater.js && node --check src/main/settingsStore.js && node --check src/main/apiService.js && node --check src/preload/preload.js && node --check src/renderer/app.js"
+    "lint": "node --check src/main/main.js && node --check src/main/database.js && node --check src/main/updater.js && node --check src/main/settingsStore.js && node --check src/main/apiCache.js && node --check src/main/apiService.js && node --check src/preload/preload.js && node --check src/renderer/app.js"
   },
   "dependencies": {
     "sql.js": "^1.13.0"

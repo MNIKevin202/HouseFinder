@@ -49,6 +49,7 @@ The main local files are:
 
 - `housefinder.sqlite`: local SQLite database.
 - `screenshots/`: local PNG snapshots captured from the built-in browser.
+- `api-cache/`: monthly Apillow search and enrichment responses saved locally to avoid repeating the same API request during the same calendar month.
 
 The renderer cannot directly write arbitrary local files. It uses IPC methods exposed by `src/preload/preload.js`, and the Electron main process owns database, backup, restore, export, screenshot, and update operations.
 
@@ -76,6 +77,7 @@ The API key is masked by default. Use Show API Key only when you need to inspect
 The usage counter tracks Apillow API requests sent by HouseFinder during the current calendar month.
 
 - The counter resets automatically when a new month begins.
+- Cached Apillow search/enrichment results are reused during the same calendar month and do not increment the usage counter.
 - Missing API key checks and locally blocked monthly-limit checks are not counted.
 - Requests that are actually sent to Apillow are counted, including requests that return no results, API errors, or network failures.
 - Settings displays usage like `23 / 100 requests used this month`.
@@ -105,6 +107,7 @@ Future providers can be added by implementing another provider class in `apiServ
 
 - HouseFinder does not hardcode or ship any Apillow API key.
 - Apillow is used only for enrichment and search. Saved homes remain local in SQLite.
+- Apillow search and listing-enrichment responses are cached locally by month using a hash of the request payload. The same search or listing URL within the same month is loaded from `api-cache/` instead of calling Apillow again.
 - The Apillow client uses the documented async flow: `POST /v1/properties`, then poll `GET /v1/results/{job_id}`.
 - Search currently supports city/state/ZIP, min/max price, beds, baths, and property type. If Apillow changes accepted filter names, the provider mapping may need an update.
 - Enrichment by URL falls back to the manual save form whenever Apillow is disabled, missing a key, capped by the monthly limit, unavailable, or returns no details.

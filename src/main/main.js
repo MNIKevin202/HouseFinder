@@ -5,11 +5,13 @@ const { HouseFinderDatabase } = require("./database");
 const { checkForUpdates, downloadAndOpenUpdate, REPO, RELEASES_URL, RELEASES_PAGE_URL } = require("./updater");
 const { SettingsStore } = require("./settingsStore");
 const { ApiProviderRegistry } = require("./apiService");
+const { ApiCache } = require("./apiCache");
 
 let mainWindow;
 let store;
 let settingsStore;
 let apiRegistry;
+let apiCache;
 
 const releaseNotesSummary = [
   "Push version tags like v0.1.0 to publish update releases.",
@@ -66,6 +68,7 @@ function registerIpc() {
     databasePath: store.dbPath,
     screenshotsPath: store.screenshotDir,
     settingsPath: settingsStore.settingsPath,
+    apiCachePath: apiCache.cacheDir,
     repo: REPO,
     releasesUrl: RELEASES_URL,
     releasesPageUrl: RELEASES_PAGE_URL,
@@ -181,7 +184,9 @@ app.whenReady().then(async () => {
   await store.init();
   settingsStore = new SettingsStore({ appDataDir: app.getPath("userData") });
   settingsStore.init();
-  apiRegistry = new ApiProviderRegistry({ settingsStore });
+  apiCache = new ApiCache({ appDataDir: app.getPath("userData") });
+  apiCache.init();
+  apiRegistry = new ApiProviderRegistry({ settingsStore, apiCache });
   registerIpc();
   await createWindow();
 

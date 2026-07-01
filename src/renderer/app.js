@@ -550,6 +550,7 @@ function settingsPage() {
         <div class="panelTitle">Local storage</div>
         <p>Database: ${escapeHtml(meta.databasePath || "")}</p>
         <p>Screenshots: ${escapeHtml(meta.screenshotsPath || "")}</p>
+        <p>Monthly API cache: ${escapeHtml(meta.apiCachePath || "")}</p>
         <div class="buttonRow">
           <button id="backupDb">Backup database</button>
           <button id="restoreDb">Restore database</button>
@@ -699,7 +700,9 @@ function bindBrowse() {
           listingUrl: enriched.home.listingUrl || url,
           sourceWebsite: enriched.home.sourceWebsite || detectSource(url)
         });
-        state.apiMessage = "Apillow filled in available listing details. Review everything before saving.";
+        state.apiMessage = enriched.fromCache
+          ? "Loaded listing details from this month's saved API data. No Apillow request was used."
+          : "Apillow filled in available listing details. Review everything before saving.";
       } catch (error) {
         state.apiSettings = await api.settings.getApi();
         state.apiMessage = error.message || "Apillow enrichment was skipped. You can still save manually.";
