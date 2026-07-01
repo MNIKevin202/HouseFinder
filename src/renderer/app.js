@@ -29,7 +29,7 @@ const state = {
   },
   metadata: null,
   apiSettings: null,
-  showApiKey: false,
+  showApiKey: {},
   apiSearch: {
     city: "",
     state: "",
@@ -246,9 +246,7 @@ function simplePanel(title, rows) {
 }
 
 function browsePage() {
-  const apiHint = state.apiSettings?.apiProvider === "apillow"
-    ? `<span class="apiPill">Apillow enrichment ${state.apiSettings.hasApillowApiKey ? "enabled" : "needs key"}</span>`
-    : `<span class="apiPill muted">Manual Mode</span>`;
+  const apiHint = providerStatusPill();
   return `
     ${pageHeader("Browse", "Use the built-in browser, then save the current listing into your local database.", `
       ${apiHint}
@@ -275,7 +273,7 @@ function apiSearchPage() {
     `)}
     <section class="panel apiNotice ${settings.usageWarning || ""}">
       <div>
-        <strong>${escapeHtml(settings.usageLabel || "API usage unavailable")}</strong>
+        <strong>${escapeHtml(settings.activeProviderStatus?.label || "API provider status unavailable")}</strong>
         <p>${apiUsageCopy(settings)}</p>
       </div>
     </section>
@@ -543,6 +541,7 @@ function calculatePayment(input) {
 function settingsPage() {
   const meta = state.metadata || {};
   const settings = state.apiSettings || {};
+  const providers = settings.providers || [];
   return `
     ${pageHeader("Settings", "Manage local data, backups, and release/update information.")}
     <section class="settingsGrid">
@@ -561,24 +560,15 @@ function settingsPage() {
         </div>
       </div>
       <div class="panel">
-        <div class="panelTitle">API settings</div>
+        <div class="panelTitle">API Providers</div>
         <form id="apiSettingsForm" class="settingsForm">
-          <label class="field"><span>API Provider</span><select name="apiProvider">
-            <option value="manual" ${settings.apiProvider !== "apillow" ? "selected" : ""}>Manual Mode / No API</option>
-            <option value="apillow" ${settings.apiProvider === "apillow" ? "selected" : ""}>Apillow</option>
+          <label class="field"><span>API Mode</span><select name="apiProvider">
+            <option value="auto" ${settings.apiProvider !== "manual" ? "selected" : ""}>Automatic provider fallback</option>
+            <option value="manual" ${settings.apiProvider === "manual" ? "selected" : ""}>Manual Mode / No API</option>
           </select></label>
-          <label class="field"><span>Apillow API Key</span><input name="apillowApiKey" id="apillowApiKey" type="${state.showApiKey ? "text" : "password"}" placeholder="${settings.hasApillowApiKey ? "Saved API key" : "Paste API key"}" /></label>
-          <label class="field"><span>Monthly API Usage Limit</span><input name="monthlyUsageLimit" type="number" min="0" value="${escapeHtml(settings.monthlyUsageLimit ?? 50)}" /></label>
-          <div class="usageBox ${settings.usageWarning || ""}">
-            <strong>${escapeHtml(settings.usageLabel || "0 / 50 requests used this month")}</strong>
-            <span>${apiUsageCopy(settings)}</span>
-          </div>
+          ${providers.map(providerSettingsCard).join("")}
           <p class="settingsHint">API keys are stored only on this computer. Secure storage: ${settings.secureStorage ? "available" : "not available, using local settings fallback"}.</p>
           <div class="buttonRow">
-            <button type="button" id="toggleApiKey">${state.showApiKey ? "Hide API Key" : "Show API Key"}</button>
-            <button type="button" id="clearApiKey">Clear API Key</button>
-            <button type="button" id="resetApiUsage">Reset Usage Counter</button>
-            <button type="button" id="testApiConnection">Test Connection</button>
             <button class="primary" type="submit">Save API Settings</button>
           </div>
           <div id="apiSettingsResult" class="updateResult">${escapeHtml(state.settingsMessage)}</div>
@@ -603,11 +593,63 @@ function settingsPage() {
 }
 
 function apiUsageCopy(settings = {}) {
-  if (settings.apiProvider !== "apillow") return "Manual Mode is active. Saved homes and manual entry continue to work normally.";
-  if (!settings.hasApillowApiKey) return "Add an Apillow API key to enable enrichment and API search.";
-  if (settings.usageWarning === "critical") return "You have used at least 95% of this month's API request limit.";
-  if (settings.usageWarning === "warning") return "You have used at least 80% of this month's API request limit.";
-  return "Apillow API usage resets automatically when a new calendar month begins.";
+  if (settings.apiProvider === "manual") return "Manual Mode is active. Saved homes and manual entry continue to work normally.";
+  return "HouseFinder starts with the highest-priority enabled provider, then falls back when a provider is missing a key, out of usage, unsupported, or fails.";
+}
+
+function providerStatusPill() {
+  const status = state.apiSettings?.activeProviderStatus;
+  if (!status || status.manual) return `<span class="apiPill muted">${escapeHtml(status?.label || "Manual Mode")}</span>`;
+  return `<span class="apiPill">${escapeHtml(status.label)}</span>`;
+}
+
+function providerSettingsCard(provider) {
+  const warningText = provider.usageWarning === "critical" ? "Danger" : provider.usageWarning === "warning" ? "Warning" : "OK";
+  const unsupported = provider.implemented ? "" : `<span class="status">Stub / TODO</span>`;
+  return `
+    <section class="providerCard ${provider.usageWarning || ""}" data-provider-card="${provider.id}">
+      <div class="providerHeader">
+        <div>
+          <h3>${escapeHtml(provider.name)}</h3>
+          <p>${escapeHtml(provider.usageLabel)}${provider.usageRemaining == null ? "" : ` • ${provider.usageRemaining} remaining`}</p>
+        </div>
+        <div class="providerBadges">
+          ${unsupported}
+          <span class="status">${warningText}</span>
+        </div>
+      </div>
+      <div class="providerGrid">
+        <label class="checkField"><input name="${provider.id}:enabled" type="checkbox" ${provider.enabled ? "checked" : ""} /> <span>Enabled</span></label>
+        <label class="field"><span>Priority</span><input name="${provider.id}:priority" type="number" min="1" value="${escapeHtml(provider.priority)}" /></label>
+        <label class="field"><span>Monthly limit</span><input name="${provider.id}:monthlyUsageLimit" type="number" min="0" value="${escapeHtml(provider.monthlyUsageLimit)}" /></label>
+        <label class="field wide"><span>API key</span><input name="${provider.id}:apiKey" id="${provider.id}ApiKey" type="${state.showApiKey[provider.id] ? "text" : "password"}" placeholder="${provider.hasApiKey ? "Saved API key" : "Paste API key"}" /></label>
+      </div>
+      <div class="capabilityList">${Object.entries(provider.capabilities || {}).map(([key, enabled]) => `<span class="${enabled ? "capOn" : "capOff"}">${escapeHtml(capabilityLabel(key))}</span>`).join("")}</div>
+      <div class="providerMeta">
+        <span>Last test: ${escapeHtml(provider.lastTestStatus || "Not tested")}</span>
+        <span>Last success: ${escapeHtml(provider.lastSuccessfulRequestDate ? new Date(provider.lastSuccessfulRequestDate).toLocaleString() : "None")}</span>
+        <span>Last error: ${escapeHtml(provider.lastErrorMessage || "None")}</span>
+      </div>
+      <div class="buttonRow">
+        <button type="button" data-toggle-provider-key="${provider.id}">${state.showApiKey[provider.id] ? "Hide API Key" : "Show API Key"}</button>
+        <button type="button" data-clear-provider-key="${provider.id}">Clear API Key</button>
+        <button type="button" data-reset-provider-usage="${provider.id}">Reset Usage Counter</button>
+        <button type="button" data-test-provider="${provider.id}">Test Connection</button>
+      </div>
+    </section>
+  `;
+}
+
+function capabilityLabel(key) {
+  return {
+    propertySearch: "Search",
+    listingDetails: "Listing details",
+    addressLookup: "Address lookup",
+    homeValueEstimate: "Home value",
+    rentEstimate: "Rent estimate",
+    comparableProperties: "Comps",
+    photos: "Photos"
+  }[key] || key;
 }
 
 function emptyState(text) {
@@ -692,7 +734,7 @@ function bindBrowse() {
       favorite: false
     };
     state.apiMessage = "";
-    if (state.apiSettings?.apiProvider === "apillow" && state.apiSettings?.hasApillowApiKey) {
+    if (state.apiSettings?.apiProvider !== "manual") {
       try {
         const enriched = await api.realEstateApi.enrichListing(url);
         state.apiSettings = enriched.settings || await api.settings.getApi();
@@ -701,8 +743,8 @@ function bindBrowse() {
           sourceWebsite: enriched.home.sourceWebsite || detectSource(url)
         });
         state.apiMessage = enriched.fromCache
-          ? "Loaded listing details from this month's saved API data. No Apillow request was used."
-          : "Apillow filled in available listing details. Review everything before saving.";
+          ? `Loaded listing details from this month's saved ${enriched.providerName || "provider"} data. No API request was used.`
+          : `${enriched.providerName || "API provider"} filled in available listing details. Review everything before saving.`;
       } catch (error) {
         state.apiSettings = await api.settings.getApi();
         state.apiMessage = error.message || "Apillow enrichment was skipped. You can still save manually.";
@@ -721,14 +763,14 @@ function bindApiSearch() {
     for (const element of form.elements) {
       if (element.name) state.apiSearch[element.name] = element.value;
     }
-    state.apiMessage = "Searching Apillow...";
+    state.apiMessage = "Searching enabled API providers...";
     state.apiResults = [];
     render();
     try {
       const result = await api.realEstateApi.searchHomes(state.apiSearch);
       state.apiSettings = result.settings || await api.settings.getApi();
       state.apiResults = result.results || [];
-      state.apiMessage = result.message || `${state.apiResults.length} result${state.apiResults.length === 1 ? "" : "s"} found.`;
+      state.apiMessage = result.message || `${state.apiResults.length} result${state.apiResults.length === 1 ? "" : "s"} found using ${result.providerName || "an API provider"}.`;
     } catch (error) {
       state.apiSettings = await api.settings.getApi();
       state.apiMessage = error.message || "API search failed. Manual Mode and saved homes still work.";
@@ -897,48 +939,68 @@ function bindApiSettings() {
   const resultBox = document.querySelector("#apiSettingsResult");
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const providerInputs = state.apiSettings.providers.map((provider) => ({
+      id: provider.id,
+      enabled: form.elements[`${provider.id}:enabled`]?.checked || false,
+      priority: form.elements[`${provider.id}:priority`]?.value || provider.priority,
+      monthlyUsageLimit: form.elements[`${provider.id}:monthlyUsageLimit`]?.value || provider.monthlyUsageLimit,
+      apiKey: form.elements[`${provider.id}:apiKey`]?.value?.trim() || ""
+    }));
     const settings = {
       apiProvider: form.elements.apiProvider.value,
-      monthlyUsageLimit: form.elements.monthlyUsageLimit.value
+      providers: providerInputs
     };
-    if (form.elements.apillowApiKey.value.trim()) {
-      settings.apillowApiKey = form.elements.apillowApiKey.value.trim();
-    }
     state.apiSettings = await api.settings.saveApi(settings);
     state.settingsMessage = "API settings saved locally.";
     render();
   });
-  document.querySelector("#toggleApiKey").addEventListener("click", async () => {
-    state.showApiKey = !state.showApiKey;
-    render();
-    if (state.showApiKey) {
-      const key = await api.settings.getApillowKey();
-      const input = document.querySelector("#apillowApiKey");
-      if (input) input.value = key;
-    }
+  document.querySelectorAll("[data-toggle-provider-key]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const providerId = button.dataset.toggleProviderKey;
+      state.showApiKey[providerId] = !state.showApiKey[providerId];
+      render();
+      if (state.showApiKey[providerId]) {
+        const key = await api.settings.getProviderKey(providerId);
+        const input = document.querySelector(`#${providerId}ApiKey`);
+        if (input) input.value = key;
+      }
+    });
   });
-  document.querySelector("#clearApiKey").addEventListener("click", async () => {
-    state.apiSettings = await api.settings.clearApillowKey();
-    state.settingsMessage = "Apillow API key cleared.";
-    render();
+  document.querySelectorAll("[data-clear-provider-key]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const providerId = button.dataset.clearProviderKey;
+      state.apiSettings = await api.settings.clearProviderKey(providerId);
+      state.settingsMessage = `${providerName(providerId)} API key cleared.`;
+      render();
+    });
   });
-  document.querySelector("#resetApiUsage").addEventListener("click", async () => {
-    state.apiSettings = await api.settings.resetApiUsage();
-    state.settingsMessage = "Usage counter reset for the current month.";
-    render();
+  document.querySelectorAll("[data-reset-provider-usage]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const providerId = button.dataset.resetProviderUsage;
+      state.apiSettings = await api.settings.resetApiUsage(providerId);
+      state.settingsMessage = `${providerName(providerId)} usage counter reset for the current month.`;
+      render();
+    });
   });
-  document.querySelector("#testApiConnection").addEventListener("click", async () => {
-    resultBox.textContent = "Testing Apillow connection...";
-    try {
-      const result = await api.realEstateApi.testConnection();
-      state.apiSettings = result.settings || await api.settings.getApi();
-      state.settingsMessage = result.message;
-    } catch (error) {
-      state.apiSettings = await api.settings.getApi();
-      state.settingsMessage = error.message || "Apillow connection test failed.";
-    }
-    render();
+  document.querySelectorAll("[data-test-provider]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const providerId = button.dataset.testProvider;
+      resultBox.textContent = `Testing ${providerName(providerId)} connection...`;
+      try {
+        const result = await api.realEstateApi.testConnection(providerId);
+        state.apiSettings = result.settings || await api.settings.getApi();
+        state.settingsMessage = result.message;
+      } catch (error) {
+        state.apiSettings = await api.settings.getApi();
+        state.settingsMessage = error.message || `${providerName(providerId)} connection test failed.`;
+      }
+      render();
+    });
   });
+}
+
+function providerName(providerId) {
+  return state.apiSettings?.providers?.find((provider) => provider.id === providerId)?.name || providerId;
 }
 
 async function render() {

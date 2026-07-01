@@ -600,6 +600,82 @@ legend {
   gap: 4px;
 }
 
+.providerCard {
+  border: 1px solid var(--line);
+  background: #11141a;
+  border-radius: var(--radius);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.providerCard.warning {
+  border-color: #f2c94c;
+}
+
+.providerCard.critical {
+  border-color: var(--danger);
+}
+
+.providerHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.providerHeader h3,
+.providerHeader p {
+  margin: 0;
+}
+
+.providerHeader p,
+.providerMeta {
+  color: var(--muted);
+}
+
+.providerBadges,
+.capabilityList {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.providerGrid {
+  display: grid;
+  grid-template-columns: 120px 100px 150px minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.providerGrid .wide {
+  grid-column: auto;
+}
+
+.providerMeta {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.capOn,
+.capOff {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.capOn {
+  color: var(--primary2);
+  background: rgba(155, 231, 195, 0.08);
+}
+
+.capOff {
+  color: var(--muted);
+  opacity: 0.65;
+}
+
 .fatal {
   padding: 30px;
   color: #ffd0d0;
@@ -623,6 +699,7 @@ legend {
   .apiSearchLayout,
   .apiResult,
   .filters,
+  .providerGrid,
   fieldset,
   .calcInputs {
     grid-template-columns: 1fr;

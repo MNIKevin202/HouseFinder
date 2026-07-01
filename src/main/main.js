@@ -75,11 +75,11 @@ function registerIpc() {
     releaseNotesSummary
   }));
   ipcMain.handle("settings:get-api", () => settingsStore.getPublicSettings());
-  ipcMain.handle("settings:get-apillow-key", () => settingsStore.getApillowApiKey());
+  ipcMain.handle("settings:get-provider-key", (_event, providerId) => settingsStore.getProviderApiKey(providerId));
   ipcMain.handle("settings:save-api", (_event, settings) => settingsStore.updateApiSettings(settings));
-  ipcMain.handle("settings:clear-apillow-key", () => settingsStore.clearApiKey());
-  ipcMain.handle("settings:reset-api-usage", () => settingsStore.resetUsageCounter());
-  ipcMain.handle("api:test-connection", () => apiRegistry.testConnection());
+  ipcMain.handle("settings:clear-provider-key", (_event, providerId) => settingsStore.clearApiKey(providerId));
+  ipcMain.handle("settings:reset-api-usage", (_event, providerId) => settingsStore.resetUsageCounter(providerId));
+  ipcMain.handle("api:test-connection", (_event, providerId) => apiRegistry.testConnection(providerId));
   ipcMain.handle("api:search-homes", (_event, criteria) => apiRegistry.searchHomes(criteria));
   ipcMain.handle("api:enrich-listing", (_event, url) => apiRegistry.enrichListing(url));
   ipcMain.handle("screenshots:save", (_event, dataUrl) => saveScreenshot(dataUrl));

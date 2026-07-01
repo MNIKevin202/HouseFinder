@@ -12,7 +12,7 @@ HouseFinder is a local-first Electron desktop application for macOS and Windows.
 - Manual editing for every saved field.
 - Local screenshot support when Electron can capture the current webview page.
 - Saved homes search/filter/sort, favorites, archive/rejected status, side-by-side comparison, dashboard summaries, JSON import, JSON/CSV export, database backup/restore, reset with confirmation, and a standalone affordability calculator.
-- Optional Apillow API integration for listing enrichment and API-powered property search while keeping Manual Mode fully functional.
+- Optional multi-provider API integration for listing enrichment and API-powered property search while keeping Manual Mode fully functional.
 - GitHub Release based update-checking code for `MNIKevin202/HouseFinder`.
 - GitHub Actions workflows for Windows build checks and tag-based release publishing.
 
@@ -49,69 +49,98 @@ The main local files are:
 
 - `housefinder.sqlite`: local SQLite database.
 - `screenshots/`: local PNG snapshots captured from the built-in browser.
-- `api-cache/`: monthly Apillow search and enrichment responses saved locally to avoid repeating the same API request during the same calendar month.
+- `api-cache/`: monthly provider search and enrichment responses saved locally to avoid repeating the same API request during the same calendar month.
 
 The renderer cannot directly write arbitrary local files. It uses IPC methods exposed by `src/preload/preload.js`, and the Electron main process owns database, backup, restore, export, screenshot, and update operations.
 
 API settings are also local only:
 
-- `settings.json`: API provider, monthly usage limit, current month, and usage counter.
-- Apillow API key: stored in `settings.json`, encrypted with Electron `safeStorage` when available.
+- `settings.json`: API mode, provider enabled states, provider priority, monthly usage limits, current month counters, last test status, last successful request date, and last error messages.
+- API keys: stored per provider in `settings.json`, encrypted with Electron `safeStorage` when available.
 
 If Electron `safeStorage` is not available on the user's platform/keychain setup, HouseFinder falls back to local settings storage. That fallback keeps the key out of GitHub and app logs, but it is not cryptographic protection.
 
-## How To Add The Apillow API Key
+## How Multi-Provider API Support Works
 
-Open Settings in the app and use the API settings section:
+Settings includes an API Providers section. Current providers:
 
-1. Set API Provider to `Apillow`.
-2. Paste the Apillow API key into the masked API key field.
-3. Enter a Monthly API Usage Limit.
-4. Click Save API Settings.
-5. Click Test Connection to verify the key.
+- Apillow: fully implemented for API-powered property search and listing URL enrichment.
+- RentCast: stub/TODO, disabled by default.
+- Realty Mole: stub/TODO, disabled by default.
+- Manual Mode / No API: always available.
+
+Each provider has its own enabled toggle, masked API key field, monthly usage limit, usage counter, priority number, test button, reset counter button, and clear key button. API keys are masked by default and can be revealed per provider.
+
+## How Provider Priority And Fallback Work
+
+When API mode is set to automatic fallback, HouseFinder starts with the lowest priority number and uses the first provider that is:
+
+- Enabled.
+- Implemented.
+- Configured with a saved API key.
+- Under its monthly app usage limit.
+- Capable of the requested operation.
+
+If that provider is exhausted, unsupported, rate-limited, unavailable, returns an invalid response, or otherwise fails, the provider manager tries the next eligible provider. If no provider succeeds, HouseFinder falls back to Manual Mode and still opens the manual save form or keeps local saved homes usable.
+
+The UI does not choose providers directly. Renderer code calls the provider manager through IPC, and the manager handles selection, capability checks, usage checks, counting, caching, fallback, and user-friendly errors.
+
+## How To Add API Keys
+
+Open Settings in the app and use the API Providers section:
+
+1. Set API Mode to automatic provider fallback, unless you want Manual Mode.
+2. Enable the providers you want to use.
+3. Paste each provider's API key into its masked key field.
+4. Set each provider's monthly usage limit.
+5. Set priority order. Lower numbers are tried first.
+6. Click Save API Settings.
+7. Click Test Connection for implemented providers.
 
 The API key is masked by default. Use Show API Key only when you need to inspect or replace the locally saved key. Use Clear API Key to remove it from local settings.
 
 ## How The Monthly API Usage Counter Works
 
-The usage counter tracks Apillow API requests sent by HouseFinder during the current calendar month.
+Usage is tracked separately per provider during the current calendar month.
 
-- The counter resets automatically when a new month begins.
-- Cached Apillow search/enrichment results are reused during the same calendar month and do not increment the usage counter.
-- Missing API key checks and locally blocked monthly-limit checks are not counted.
-- Requests that are actually sent to Apillow are counted, including requests that return no results, API errors, or network failures.
-- Settings displays usage like `23 / 100 requests used this month`.
-- At 80% of the monthly limit, HouseFinder shows a warning.
-- At 95% of the monthly limit, HouseFinder shows a stronger warning.
-- When the monthly limit is reached, Apillow requests are blocked with: `Monthly API limit reached. Increase your limit in Settings or switch to Manual Mode.`
+- Each provider counter resets automatically when a new month begins.
+- Cached search/enrichment results are reused during the same calendar month and do not increment usage.
+- Missing API key checks, disabled provider checks, unsupported operation checks, and locally blocked monthly-limit checks are not counted.
+- Requests actually sent to a provider are counted, including requests that return no results, API errors, or network failures.
+- Settings displays usage like `Apillow: 23 / 100 used`.
+- At 80% of a provider's monthly limit, HouseFinder shows a warning.
+- At 95% or exhausted, HouseFinder shows a stronger warning.
+- When one provider reaches its monthly limit, it is skipped and the next eligible provider is tried.
 - Manual Mode, saved homes, manual editing, exports, backups, and local browsing continue to work when the API limit is reached.
 
 ## How To Test The Apillow Connection
 
-In Settings, click Test Connection. HouseFinder sends a small Apillow property request through the provider layer and polls for completion. This validates the saved API key and updates the monthly usage counter because the request is actually sent to Apillow.
+In Settings, click Test Connection on an implemented provider. For Apillow, HouseFinder sends a small property request through the provider manager and polls for completion. This validates the saved API key and updates Apillow usage because the request is actually sent. RentCast and Realty Mole currently report that they are stubs/TODOs.
 
 ## Apillow Provider Abstraction
 
 The reusable API layer lives in:
 
-- `src/main/apiService.js`: provider registry, Apillow client, request/polling flow, error mapping, search payload creation, and Apillow-to-HouseFinder result normalization.
-- `src/main/settingsStore.js`: local API settings, secure/local API key storage, monthly counter reset, monthly limit checks, and request counting.
+- `src/main/apiService.js`: provider manager, fallback order, capability checks, Apillow client, RentCast/Realty Mole stubs, request/polling flow, error mapping, search payload creation, and Apillow-to-HouseFinder result normalization.
+- `src/main/settingsStore.js`: provider settings, secure/local API key storage, per-provider monthly counter reset, monthly limit checks, request counting, priority, and status metadata.
+- `src/main/apiCache.js`: monthly provider response cache keyed by provider, operation, request payload, and month.
 - `src/main/main.js`: IPC wiring for settings, connection tests, search, and enrichment.
 - `src/preload/preload.js`: safe renderer-facing API methods.
-- `src/renderer/app.js`: API Settings UI, API Search page, and Save Current Listing enrichment fallback.
+- `src/renderer/app.js`: multi-provider Settings UI, API Search page, API status indicators, and Save Current Listing enrichment fallback.
 - `src/renderer/styles/app.css`: API search/settings UI and usage warning styles.
 
-Future providers can be added by implementing another provider class in `apiService.js`, registering it in `ApiProviderRegistry`, and adding a provider option in Settings.
+Future providers can be added by implementing another provider class in `apiService.js`, declaring capabilities in `settingsStore.js`, registering it in `ApiProviderManager`, and mapping its response fields into HouseFinder's saved-home shape.
 
 ## Apillow Integration Limitations
 
 - HouseFinder does not hardcode or ship any Apillow API key.
-- Apillow is used only for enrichment and search. Saved homes remain local in SQLite.
-- Apillow search and listing-enrichment responses are cached locally by month using a hash of the request payload. The same search or listing URL within the same month is loaded from `api-cache/` instead of calling Apillow again.
+- API providers are used only for enrichment and search. Saved homes remain local in SQLite.
+- Provider search and listing-enrichment responses are cached locally by month using a hash of provider, operation, request payload, and month.
 - The Apillow client uses the documented async flow: `POST /v1/properties`, then poll `GET /v1/results/{job_id}`.
 - Search currently supports city/state/ZIP, min/max price, beds, baths, and property type. If Apillow changes accepted filter names, the provider mapping may need an update.
-- Enrichment by URL falls back to the manual save form whenever Apillow is disabled, missing a key, capped by the monthly limit, unavailable, or returns no details.
-- Test Connection consumes real Apillow request usage because it verifies the key with a real API request.
+- Enrichment by URL falls back to the manual save form whenever all providers are disabled, missing keys, capped by monthly limits, unsupported, unavailable, or return no details.
+- Test Connection consumes real provider request usage for implemented providers because it verifies the key with a real API request.
+- RentCast and Realty Mole are present as disabled-by-default stubs. Their API request/response mapping still needs implementation.
 
 ## How To Package For macOS And Windows
 

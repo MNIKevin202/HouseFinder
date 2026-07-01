@@ -2,13 +2,63 @@ const fs = require("fs");
 const path = require("path");
 const { safeStorage } = require("electron");
 
+const PROVIDER_DEFINITIONS = [
+  {
+    id: "apillow",
+    name: "Apillow",
+    implemented: true,
+    defaultEnabled: false,
+    defaultLimit: 50,
+    capabilities: {
+      propertySearch: true,
+      listingDetails: true,
+      addressLookup: true,
+      homeValueEstimate: true,
+      rentEstimate: true,
+      comparableProperties: true,
+      photos: true
+    }
+  },
+  {
+    id: "rentcast",
+    name: "RentCast",
+    implemented: false,
+    defaultEnabled: false,
+    defaultLimit: 50,
+    capabilities: {
+      propertySearch: false,
+      listingDetails: false,
+      addressLookup: false,
+      homeValueEstimate: false,
+      rentEstimate: false,
+      comparableProperties: false,
+      photos: false
+    }
+  },
+  {
+    id: "realtyMole",
+    name: "Realty Mole",
+    implemented: false,
+    defaultEnabled: false,
+    defaultLimit: 100,
+    capabilities: {
+      propertySearch: false,
+      listingDetails: false,
+      addressLookup: false,
+      homeValueEstimate: false,
+      rentEstimate: false,
+      comparableProperties: false,
+      photos: false
+    }
+  }
+];
+
 const DEFAULT_SETTINGS = {
-  apiProvider: "manual",
-  apillowApiKey: "",
-  apillowApiKeyEncrypted: false,
-  monthlyUsageLimit: 50,
-  usageMonth: currentMonth(),
-  usageCount: 0
+  apiProvider: "auto",
+  providers: Object.fromEntries(PROVIDER_DEFINITIONS.map((definition, index) => [
+    definition.id,
+    defaultProviderSettings(definition, index)
+  ]))
 };
 
 function currentMonth(date = new Date()) {
@@ -18,38 +68,109 @@ function currentMonth(date = new Date()) {
 class SettingsStore {
   constructor({ appDataDir }) {
     this.settingsPath = path.join(appDataDir, "settings.json");
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = clone(DEFAULT_SETTINGS);
   }
 
   init() {
     if (fs.existsSync(this.settingsPath)) {
       const parsed = JSON.parse(fs.readFileSync(this.settingsPath, "utf8"));
-      this.settings = { ...DEFAULT_SETTINGS, ...parsed };
+      this.settings = this.normalizeSettings(parsed);
+    } else {
+      this.settings = clone(DEFAULT_SETTINGS);
     }
     this.resetUsageIfNeeded();
     this.persist();
   }
 
+  normalizeSettings(input = {}) {
+    const migrated = {
+      apiProvider: input.apiProvider === "manual" ? "manual" : "auto",
+      providers: clone(DEFAULT_SETTINGS.providers)
+    };
+
+    for (const definition of PROVIDER_DEFINITIONS) {
+      const existing = input.providers?.[definition.id] || {};
+      migrated.providers[definition.id] = {
+        ...migrated.providers[definition.id],
+        ...existing,
+        id: definition.id
+      };
+    }
+
+    // Migrate the original single-provider Apillow settings forward.
+    if (!input.providers && (input.apillowApiKey || input.monthlyUsageLimit || input.usageCount)) {
+      migrated.providers.apillow.enabled = input.apiProvider === "apillow";
+      migrated.providers.apillow.apiKey = input.apillowApiKey || "";
+      migrated.providers.apillow.apiKeyEncrypted = Boolean(input.apillowApiKeyEncrypted);
+      migrated.providers.apillow.monthlyUsageLimit = Number(input.monthlyUsageLimit) || 50;
+      migrated.providers.apillow.usageMonth = input.usageMonth || currentMonth();
+      migrated.providers.apillow.usageCount = Number(input.usageCount) || 0;
+    }
+
+    return migrated;
+  }
+
   getPublicSettings() {
     this.resetUsageIfNeeded();
-    const limit = Number(this.settings.monthlyUsageLimit) || 0;
-    const count = Number(this.settings.usageCount) || 0;
+    const providers = PROVIDER_DEFINITIONS
+      .map((definition) => this.publicProvider(definition))
+      .sort((a, b) => a.priority - b.priority);
+    const apillow = providers.find((provider) => provider.id === "apillow");
     return {
       apiProvider: this.settings.apiProvider,
-      monthlyUsageLimit: limit,
-      usageMonth: this.settings.usageMonth,
-      usageCount: count,
-      hasApillowApiKey: Boolean(this.getApillowApiKey()),
-      usageLabel: `${count} / ${limit || "unlimited"} requests used this month`,
-      usageWarning: usageWarning(count, limit),
-      secureStorage: safeStorage.isEncryptionAvailable()
+      providers,
+      activeProviderStatus: this.getActiveProviderStatus(),
+      hasApillowApiKey: Boolean(this.getProviderApiKey("apillow")),
+      monthlyUsageLimit: apillow?.monthlyUsageLimit || 0,
+      usageMonth: apillow?.usageMonth || currentMonth(),
+      usageCount: apillow?.usageCount || 0,
+      usageLabel: apillow?.usageLabel || "",
+      usageWarning: apillow?.usageWarning || "",
+      secureStorage: encryptionAvailable()
     };
   }
 
-  getApillowApiKey() {
-    const value = this.settings.apillowApiKey || "";
+  publicProvider(definition) {
+    const provider = this.settings.providers[definition.id] || defaultProviderSettings(definition, 0);
+    const limit = Number(provider.monthlyUsageLimit) || 0;
+    const count = Number(provider.usageCount) || 0;
+    const warning = usageWarning(count, limit);
+    return {
+      id: definition.id,
+      name: definition.name,
+      implemented: definition.implemented,
+      enabled: Boolean(provider.enabled),
+      hasApiKey: Boolean(this.getProviderApiKey(definition.id)),
+      monthlyUsageLimit: limit,
+      usageMonth: provider.usageMonth || currentMonth(),
+      usageCount: count,
+      usageRemaining: limit > 0 ? Math.max(limit - count, 0) : null,
+      usageLabel: `${count} / ${limit || "unlimited"} used`,
+      usageWarning: warning,
+      priority: Number(provider.priority) || 99,
+      lastTestStatus: provider.lastTestStatus || "",
+      lastSuccessfulRequestDate: provider.lastSuccessfulRequestDate || "",
+      lastErrorMessage: provider.lastErrorMessage || "",
+      capabilities: definition.capabilities
+    };
+  }
+
+  getActiveProviderStatus() {
+    if (this.settings.apiProvider === "manual") {
+      return { label: "Manual Mode active", providerId: "manual", manual: true };
+    }
+    const candidates = this.getProvidersByPriority()
+      .filter((provider) => provider.enabled && provider.hasApiKey && !providerExhausted(provider));
+    const first = candidates[0];
+    if (!first) return { label: "No API providers ready - Manual Mode active", providerId: "manual", manual: true };
+    return { label: `Using ${first.name} • ${first.usageLabel}`, providerId: first.id, manual: false };
+  }
+
+  getProviderApiKey(providerId) {
+    const provider = this.settings.providers[providerId];
+    const value = provider?.apiKey || "";
     if (!value) return "";
-    if (!this.settings.apillowApiKeyEncrypted) return value;
+    if (!provider.apiKeyEncrypted) return value;
     try {
       return safeStorage.decryptString(Buffer.from(value, "base64"));
     } catch {
@@ -58,70 +179,118 @@ class SettingsStore {
   }
 
   updateApiSettings(input = {}) {
-    const nextProvider = input.apiProvider === "apillow" ? "apillow" : "manual";
-    this.settings.apiProvider = nextProvider;
-    this.settings.monthlyUsageLimit = Math.max(0, Number(input.monthlyUsageLimit) || 0);
-    if (Object.prototype.hasOwnProperty.call(input, "apillowApiKey")) {
-      const key = String(input.apillowApiKey || "").trim();
-      if (key) this.settings.apillowApiKey = this.encodeSecret(key);
-      this.settings.apillowApiKeyEncrypted = key ? safeStorage.isEncryptionAvailable() : this.settings.apillowApiKeyEncrypted;
+    this.settings.apiProvider = input.apiProvider === "manual" ? "manual" : "auto";
+    const providers = Array.isArray(input.providers) ? input.providers : [];
+    for (const providerInput of providers) {
+      const provider = this.settings.providers[providerInput.id];
+      if (!provider) continue;
+      provider.enabled = Boolean(providerInput.enabled);
+      provider.monthlyUsageLimit = Math.max(0, Number(providerInput.monthlyUsageLimit) || 0);
+      provider.priority = Math.max(1, Number(providerInput.priority) || provider.priority || 99);
+      if (Object.prototype.hasOwnProperty.call(providerInput, "apiKey")) {
+        const key = String(providerInput.apiKey || "").trim();
+        if (key) {
+          provider.apiKey = this.encodeSecret(key);
+          provider.apiKeyEncrypted = encryptionAvailable();
+        }
+      }
     }
     this.resetUsageIfNeeded();
     this.persist();
     return this.getPublicSettings();
   }
 
-  clearApiKey() {
-    this.settings.apillowApiKey = "";
-    this.settings.apillowApiKeyEncrypted = false;
+  clearApiKey(providerId = "apillow") {
+    const provider = this.settings.providers[providerId];
+    if (!provider) return this.getPublicSettings();
+    provider.apiKey = "";
+    provider.apiKeyEncrypted = false;
+    provider.lastTestStatus = "";
     this.persist();
     return this.getPublicSettings();
   }
 
-  resetUsageCounter() {
-    this.settings.usageMonth = currentMonth();
-    this.settings.usageCount = 0;
+  resetUsageCounter(providerId = "apillow") {
+    const provider = this.settings.providers[providerId];
+    if (!provider) return this.getPublicSettings();
+    provider.usageMonth = currentMonth();
+    provider.usageCount = 0;
     this.persist();
     return this.getPublicSettings();
   }
 
-  canSendApillowRequest() {
+  canSendProviderRequest(providerId, capability) {
     this.resetUsageIfNeeded();
-    if (this.settings.apiProvider !== "apillow") {
+    if (this.settings.apiProvider === "manual") {
       return { ok: false, code: "manual_mode", message: "Manual Mode is enabled." };
     }
-    if (!this.getApillowApiKey()) {
-      return { ok: false, code: "missing_api_key", message: "Add your Apillow API key in Settings first." };
+    const publicProvider = this.getProvidersByPriority().find((provider) => provider.id === providerId);
+    if (!publicProvider) return { ok: false, code: "provider_missing", message: "Provider is not configured." };
+    if (!publicProvider.implemented) return { ok: false, code: "provider_stub", message: `${publicProvider.name} is a stub provider and is not implemented yet.` };
+    if (!publicProvider.enabled) return { ok: false, code: "provider_disabled", message: `${publicProvider.name} is disabled.` };
+    if (!publicProvider.hasApiKey) return { ok: false, code: "missing_api_key", message: `${publicProvider.name} needs an API key in Settings.` };
+    if (capability && !publicProvider.capabilities[capability]) {
+      return { ok: false, code: "unsupported_operation", message: `${publicProvider.name} does not support this operation yet.` };
     }
-    const limit = Number(this.settings.monthlyUsageLimit) || 0;
-    const count = Number(this.settings.usageCount) || 0;
+    const limit = Number(publicProvider.monthlyUsageLimit) || 0;
+    const count = Number(publicProvider.usageCount) || 0;
     if (limit > 0 && count >= limit) {
-      return {
-        ok: false,
-        code: "monthly_limit_reached",
-        message: "Monthly API limit reached. Increase your limit in Settings or switch to Manual Mode."
-      };
+      return { ok: false, code: "monthly_limit_reached", message: `${publicProvider.name} reached its monthly API limit.` };
     }
     return { ok: true };
   }
 
-  noteApillowRequestSent() {
+  noteProviderRequestSent(providerId) {
     this.resetUsageIfNeeded();
-    this.settings.usageCount = (Number(this.settings.usageCount) || 0) + 1;
+    const provider = this.settings.providers[providerId];
+    if (!provider) return this.getPublicSettings();
+    provider.usageCount = (Number(provider.usageCount) || 0) + 1;
+    this.persist();
+    return this.getPublicSettings();
+  }
+
+  noteProviderSuccess(providerId) {
+    const provider = this.settings.providers[providerId];
+    if (!provider) return;
+    provider.lastSuccessfulRequestDate = new Date().toISOString();
+    provider.lastErrorMessage = "";
+    this.persist();
+  }
+
+  noteProviderError(providerId, message) {
+    const provider = this.settings.providers[providerId];
+    if (!provider) return;
+    provider.lastErrorMessage = String(message || "");
+    this.persist();
+  }
+
+  setProviderTestResult(providerId, status, message = "") {
+    const provider = this.settings.providers[providerId];
+    if (!provider) return this.getPublicSettings();
+    provider.lastTestStatus = status;
+    provider.lastErrorMessage = status === "success" ? "" : String(message || "");
     this.persist();
     return this.getPublicSettings();
   }
 
   resetUsageIfNeeded() {
     const month = currentMonth();
-    if (this.settings.usageMonth !== month) {
-      this.settings.usageMonth = month;
-      this.settings.usageCount = 0;
+    for (const provider of Object.values(this.settings.providers)) {
+      if (provider.usageMonth !== month) {
+        provider.usageMonth = month;
+        provider.usageCount = 0;
+      }
     }
   }
 
+  getProvidersByPriority() {
+    return PROVIDER_DEFINITIONS
+      .map((definition) => this.publicProvider(definition))
+      .sort((a, b) => a.priority - b.priority);
+  }
+
   encodeSecret(secret) {
-    if (safeStorage.isEncryptionAvailable()) {
+    if (encryptionAvailable()) {
       return safeStorage.encryptString(secret).toString("base64");
     }
     // Electron safeStorage can be unavailable on some Linux/desktop keychain setups.
@@ -136,12 +305,41 @@ class SettingsStore {
   }
 }
 
+function defaultProviderSettings(definition, index) {
+  return {
+    id: definition.id,
+    enabled: definition.defaultEnabled,
+    apiKey: "",
+    apiKeyEncrypted: false,
+    monthlyUsageLimit: definition.defaultLimit,
+    usageMonth: currentMonth(),
+    usageCount: 0,
+    priority: index + 1,
+    lastTestStatus: "",
+    lastSuccessfulRequestDate: "",
+    lastErrorMessage: ""
+  };
+}
+
 function usageWarning(count, limit) {
   if (!limit) return "";
   const ratio = count / limit;
+  if (count >= limit) return "critical";
   if (ratio >= 0.95) return "critical";
   if (ratio >= 0.8) return "warning";
   return "";
 }
 
-module.exports = { SettingsStore, currentMonth, usageWarning };
+function providerExhausted(provider) {
+  return provider.monthlyUsageLimit > 0 && provider.usageCount >= provider.monthlyUsageLimit;
+}
+
+function encryptionAvailable() {
+  return Boolean(safeStorage?.isEncryptionAvailable?.());
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+module.exports = { SettingsStore, currentMonth, usageWarning, PROVIDER_DEFINITIONS };

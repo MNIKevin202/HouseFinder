@@ -22,13 +22,13 @@ contextBridge.exposeInMainWorld("housefinder", {
   },
   settings: {
     getApi: () => ipcRenderer.invoke("settings:get-api"),
-    getApillowKey: () => ipcRenderer.invoke("settings:get-apillow-key"),
+    getProviderKey: (providerId) => ipcRenderer.invoke("settings:get-provider-key", providerId),
     saveApi: (settings) => ipcRenderer.invoke("settings:save-api", settings),
-    clearApillowKey: () => ipcRenderer.invoke("settings:clear-apillow-key"),
-    resetApiUsage: () => ipcRenderer.invoke("settings:reset-api-usage")
+    clearProviderKey: (providerId) => ipcRenderer.invoke("settings:clear-provider-key", providerId),
+    resetApiUsage: (providerId) => ipcRenderer.invoke("settings:reset-api-usage", providerId)
   },
   realEstateApi: {
-    testConnection: () => ipcRenderer.invoke("api:test-connection"),
+    testConnection: (providerId) => ipcRenderer.invoke("api:test-connection", providerId),
     searchHomes: (criteria) => ipcRenderer.invoke("api:search-homes", criteria),
     enrichListing: (url) => ipcRenderer.invoke("api:enrich-listing", url)
   },
