@@ -1,0 +1,46 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("housefinder", {
+  homes: {
+    list: (filters) => ipcRenderer.invoke("homes:list", filters),
+    get: (id) => ipcRenderer.invoke("homes:get", id),
+    save: (home) => ipcRenderer.invoke("homes:save", home),
+    update: (id, home) => ipcRenderer.invoke("homes:update", id, home),
+    delete: (id) => ipcRenderer.invoke("homes:delete", id),
+    dashboard: () => ipcRenderer.invoke("homes:dashboard")
+  },
+  screenshots: {
+    save: (dataUrl) => ipcRenderer.invoke("screenshots:save", dataUrl)
+  },
+  data: {
+    exportJson: () => ipcRenderer.invoke("data:export-json"),
+    exportCsv: () => ipcRenderer.invoke("data:export-csv"),
+    importJson: () => ipcRenderer.invoke("data:import-json"),
+    backup: () => ipcRenderer.invoke("data:backup"),
+    restore: () => ipcRenderer.invoke("data:restore"),
+    reset: () => ipcRenderer.invoke("data:reset")
+  },
+  settings: {
+    getApi: () => ipcRenderer.invoke("settings:get-api"),
+    getApillowKey: () => ipcRenderer.invoke("settings:get-apillow-key"),
+    saveApi: (settings) => ipcRenderer.invoke("settings:save-api", settings),
+    clearApillowKey: () => ipcRenderer.invoke("settings:clear-apillow-key"),
+    resetApiUsage: () => ipcRenderer.invoke("settings:reset-api-usage")
+  },
+  realEstateApi: {
+    testConnection: () => ipcRenderer.invoke("api:test-connection"),
+    searchHomes: (criteria) => ipcRenderer.invoke("api:search-homes", criteria),
+    enrichListing: (url) => ipcRenderer.invoke("api:enrich-listing", url)
+  },
+  updates: {
+    check: (options) => ipcRenderer.invoke("updates:check", options),
+    downloadAndOpen: (assetUrl, assetName) => ipcRenderer.invoke("updates:download-open", assetUrl, assetName)
+  },
+  shell: {
+    openPath: (targetPath) => ipcRenderer.invoke("shell:open-path", targetPath),
+    showItem: (targetPath) => ipcRenderer.invoke("shell:show-item", targetPath)
+  },
+  app: {
+    metadata: () => ipcRenderer.invoke("app:metadata")
+  }
+});

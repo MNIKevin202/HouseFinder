@@ -1,0 +1,57 @@
+{
+  "name": "housefinder",
+  "version": "0.1.0",
+  "description": "Local-first desktop app for saving, researching, and comparing homes.",
+  "main": "src/main/main.js",
+  "author": "MNIKevin202",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac dmg zip --publish never",
+    "dist:win": "electron-builder --win nsis --publish never",
+    "pack": "electron-builder --dir --publish never",
+    "lint": "node --check src/main/main.js && node --check src/main/database.js && node --check src/main/updater.js && node --check src/main/settingsStore.js && node --check src/main/apiService.js && node --check src/preload/preload.js && node --check src/renderer/app.js"
+  },
+  "dependencies": {
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "electron": "^37.10.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.mnikevin202.housefinder",
+    "productName": "HouseFinder",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "node_modules/sql.js/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.lifestyle",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true
+    },
+    "dmg": {
+      "artifactName": "HouseFinder-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "HouseFinder-Setup-${version}-${arch}.${ext}"
+    }
+  }
+}
