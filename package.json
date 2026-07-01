@@ -1,6 +1,6 @@
 {
   "name": "housefinder",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "Local-first desktop app for saving, researching, and comparing homes.",
   "main": "src/main/main.js",
   "author": "MNIKevin202",
